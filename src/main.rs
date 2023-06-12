@@ -4,7 +4,7 @@ use std::{env};
 
 #[get("/")]
 async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello world!")
+    HttpResponse::Ok().body("Hello world!!!")
 }
 
 #[post("/echo")]
