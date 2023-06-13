@@ -1,5 +1,10 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, Error};
+use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
+use db::lib::establish_connection;
+use scraper::scrape;
 use std::{env};
+
+mod db;
+mod scraper;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -17,7 +22,6 @@ async fn server() -> std::io::Result<()> {
         App::new()
             .service(hello)
             .service(echo)
-            .route("/hey", web::get().to(manual_hello))
     })
     .bind(("127.0.0.1", 8080))?
     .run()
@@ -26,11 +30,12 @@ async fn server() -> std::io::Result<()> {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    let pg_connection = establish_connection();
 
     match args[1].as_str() {
         "server" => {
-            server();
+            let _ = server();
         }
-        _ => println!("hello")
+        _ => scrape(pg_connection)
     };
 }
