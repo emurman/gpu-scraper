@@ -1,4 +1,4 @@
 #!/bin/bash
 
-cargo build --release
-docker build . -t scraper
+docker image rm -f gpu-scraper-app
+nohup docker compose build > nohup.txt &
