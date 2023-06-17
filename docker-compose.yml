@@ -1,5 +1,38 @@
 services:
   app:
-    image: scraper:latest
+    container_name: app
+    build: .
+    image: gpu-scraper-app
+    command: gpu-scraper server
+    restart: always
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:supersecret@db:5432/postgres
     ports:
       - "8080:8080"
+  scraper:
+    container_name: scraper
+    image: gpu-scraper-app
+    command: gpu-scraper scrape
+    depends_on:
+      - db
+      - app
+    profiles:
+      - scraper
+    restart: on-failure
+    environment:
+      - DATABASE_URL=postgres://postgres:supersecret@db:5432/postgres
+  db:
+    container_name: db
+    restart: always
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=supersecret
+      - POSTGRES_DB=postgres
+    volumes:
+      - ${HOME}/postgres-data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+

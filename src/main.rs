@@ -1,10 +1,15 @@
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
 use db::lib::establish_connection;
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use scraper::scrape;
 use std::{env};
 
+extern crate diesel_migrations;
+
 mod db;
 mod scraper;
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -23,14 +28,15 @@ async fn server() -> std::io::Result<()> {
             .service(hello)
             .service(echo)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let pg_connection = establish_connection();
+    let mut pg_connection = establish_connection();
+    pg_connection.run_pending_migrations(MIGRATIONS).unwrap();
 
     match args[1].as_str() {
         "server" => {
