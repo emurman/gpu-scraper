@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use diesel::{PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
 use serde::Deserialize;
 
-use crate::db::models::{Model, NewPrice};
+use crate::db::{
+    models::{Model, NewPrice, Product},
+    schema::product,
+};
 
 const FIND_PRODUCT_IDS_URL: &str = "https://www.inet.se/api/filter/v2?wh=00&includeHiddenFilters=false&companyMode=false&sortColumn=search&sortDirection=desc";
 const SCRAPE_PRICES_URL: &str = "https://www.inet.se/api/products";
@@ -16,6 +19,7 @@ struct ProductIdsScrapeResponse {
 
 #[derive(Debug, Deserialize)]
 struct ProductPricesScrapeResponse {
+    id: String,
     name: String,
     price: Price,
 }
@@ -33,12 +37,15 @@ pub fn scrape(mut connection: PgConnection) -> () {
         .load(&mut connection)
         .expect("Failed to get models");
 
+    let mut count = 0;
     for m in result {
-        scrape_model(m, &mut connection)
+        count += scrape_model(m, &mut connection)
     }
+
+    println!("Successfully fetched prices for {} products", count);
 }
 
-fn scrape_model(m: Model, conn: &mut PgConnection) {
+fn scrape_model(m: Model, conn: &mut PgConnection) -> u32 {
     use crate::db::schema::price;
 
     let client = reqwest::blocking::Client::new();
@@ -61,20 +68,29 @@ fn scrape_model(m: Model, conn: &mut PgConnection) {
         .json::<HashMap<String, ProductPricesScrapeResponse>>()
         .expect(format!("Failed to parse response for {}", m.name).as_str());
 
+    let result = prices_response.len() as u32;
     for product_price in prices_response.into_values() {
+        diesel::insert_into(product::table)
+            .values(Product {
+                id: product_price.id.clone(),
+                model_id: m.id,
+                product_name: product_price.name,
+            })
+            .on_conflict_do_nothing()
+            .execute(conn).expect("Failed to upsert product");
+
         let new_price = NewPrice {
-            model_name: m.name.clone(),
-            product_name: product_price.name,
+            product_id: product_price.id,
             value: product_price.price.price,
         };
-        let result = diesel::insert_into(price::table)
+        let _ = diesel::insert_into(price::table)
             .values(&new_price)
             .returning(crate::db::models::Price::as_returning())
             .get_result(conn)
             .expect("Failed to push price");
-
-        // todo: log how many updates were performed etc
     }
+
+    result
 }
 
 fn create_payload(model_name: &String) -> String {

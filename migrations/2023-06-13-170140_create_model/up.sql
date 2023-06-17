@@ -1,5 +1,6 @@
 -- Your SQL goes here
 
 CREATE TABLE model (
-  name VARCHAR PRIMARY KEY
+  id SERIAL PRIMARY KEY,
+  name VARCHAR NOT NULL
 )
