@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, thread, time::Duration};
 
 use diesel::{PgConnection, QueryDsl, RunQueryDsl, SelectableHelper};
 use serde::Deserialize;
@@ -8,7 +8,7 @@ use crate::db::{
     schema::product,
 };
 
-const FIND_PRODUCT_IDS_URL: &str = "https://www.inet.se/api/filter/v2?wh=00&includeHiddenFilters=false&companyMode=false&sortColumn=search&sortDirection=desc";
+const FIND_PRODUCT_IDS_URL: &str = "https://www.inet.se/api/filter/v2";
 const SCRAPE_PRICES_URL: &str = "https://www.inet.se/api/products";
 
 #[derive(Debug, Deserialize)]
@@ -21,7 +21,7 @@ struct ProductIdsScrapeResponse {
 struct ProductPricesScrapeResponse {
     id: String,
     name: String,
-    price: Price,
+    price: Option<Price>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,17 +38,21 @@ pub fn scrape(mut connection: PgConnection) -> () {
         .expect("Failed to get models");
 
     let mut count = 0;
+
     for m in result {
-        count += scrape_model(m, &mut connection)
+        println!("Scraping model {}...", m.name);
+        count += scrape_model(&m, &mut connection);
+        thread::sleep(Duration::from_secs(5))
     }
 
     println!("Successfully fetched prices for {} products", count);
 }
 
-fn scrape_model(m: Model, conn: &mut PgConnection) -> u32 {
+fn scrape_model(m: &Model, conn: &mut PgConnection) -> u32 {
     use crate::db::schema::price;
 
     let client = reqwest::blocking::Client::new();
+
     let product_ids = client
         .post(FIND_PRODUCT_IDS_URL)
         .body(create_payload(&m.name))
@@ -68,8 +72,12 @@ fn scrape_model(m: Model, conn: &mut PgConnection) -> u32 {
         .json::<HashMap<String, ProductPricesScrapeResponse>>()
         .expect(format!("Failed to parse response for {}", m.name).as_str());
 
+
     let result = prices_response.len() as u32;
     for product_price in prices_response.into_values() {
+        if product_price.price.is_none() {
+            continue;
+        }
         diesel::insert_into(product::table)
             .values(Product {
                 id: product_price.id.clone(),
@@ -81,7 +89,7 @@ fn scrape_model(m: Model, conn: &mut PgConnection) -> u32 {
 
         let new_price = NewPrice {
             product_id: product_price.id,
-            value: product_price.price.price,
+            value: product_price.price.unwrap().price,
         };
         let _ = diesel::insert_into(price::table)
             .values(&new_price)

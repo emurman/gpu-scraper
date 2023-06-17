@@ -1,5 +1,3 @@
--- Your SQL goes here
-
 INSERT INTO model("name") VALUES
     ('Geforce RTX 3060'),
     ('GeForce RTX 3060 Ti'),

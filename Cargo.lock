@@ -655,6 +655,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "dotenvy",
+ "rand",
  "reqwest",
  "serde",
 ]
